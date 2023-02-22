@@ -1,17 +1,12 @@
 import os
-import sys
 import cplex
 from cplex.exceptions import CplexError
 import networkx as nx
-from networkx.algorithms import bipartite
 import random
-import time
 import numpy as np
 import argparse
 from discrete_optimization.rcpsp.rcpsp_model import RCPSPModel
 from discrete_optimization.rcpsp.solver.rcpsp_lp_solver import LP_RCPSP_CPLEX
-from sklearn.datasets import make_regression 
-from sklearn.preprocessing import PolynomialFeatures
 
 
 def disable_output_cpx(instance_cpx):
@@ -20,133 +15,6 @@ def disable_output_cpx(instance_cpx):
     instance_cpx.set_warning_stream(None)
     instance_cpx.set_results_stream(None)
 
-
-def dimacsToNx(filename):
-    g = nx.Graph()
-    with open(filename, 'r') as f:
-        for line in f:
-            arr = line.split()
-            if line[0] == 'e':
-                g.add_edge(int(arr[1]), int(arr[2]))
-    return g
-
-
-# def generateRevsCosts(g, whichSet, setParam):
-#     if whichSet == 'SET1':
-#         for node in g.nodes():
-#             g.nodes[node]['revenue'] = random.randint(1,100)
-#         for u,v,edge in g.edges(data=True):
-#             edge['cost'] = np.round((g.nodes[u]['revenue'] + g.nodes[v]['revenue'])/float(setParam))
-#     elif whichSet == 'SET2':
-#         for node in g.nodes():
-#             g.nodes[node]['revenue'] = float(setParam)
-#         for u,v,edge in g.edges(data=True):
-#             edge['cost'] = 1.0
-#
-#
-# def generateDataPolySPO(true_func, num_data, poly_deg=1, n_features=10, bias=0, noise_halfwidth=0.5, a_min=None, a_max=None):
-#     feature_matrix = np.random.normal(loc=0, scale=1, size=(num_data, n_features))
-#
-#     output_vector = np.expand_dims(np.power(feature_matrix.dot(true_func), poly_deg), axis=1)
-#     output_vector += bias
-#     output_vector *= np.random.rand(num_data,1) * (2 * noise_halfwidth) + (1 - noise_halfwidth)
-#
-#     output_vector = np.clip(output_vector, a_min=a_min, a_max=a_max)
-#
-#     return feature_matrix, output_vector
-#
-#
-# def generateDataSPO(true_func, g, E2, n_features=10, nodes_feature_factor=100, nodes_dummy=-5, noise_loc=0, noise_scale=50, bias=1000):
-#     num_nodes = nx.number_of_nodes(g)
-#     num_edges = len(E2)
-#
-#     true_func = np.expand_dims(np.append(true_func, [bias]), axis=1)
-#
-#     print(true_func)
-#
-#     feature_matrix = np.random.rand(num_nodes+num_edges, n_features+1)
-#     feature_matrix[:num_nodes,:] *= nodes_feature_factor
-#     feature_matrix[:num_nodes,-1] = nodes_dummy
-#     feature_matrix[num_nodes:,-1] = 0
-#
-#     output_vector = feature_matrix.dot(true_func)
-#     output_vector += np.random.normal(loc=noise_loc, scale=noise_scale, size=(num_nodes+num_edges,1))
-#     output_vector[:num_nodes] = np.clip(output_vector[:num_nodes], a_min=None, a_max=0)
-#     output_vector[num_nodes:] = np.clip(output_vector[num_nodes:], a_min=1.0, a_max=None)
-#
-#     return feature_matrix, output_vector
-#
-# def generateRevsCostsSPO(g, E2, feature_matrix, output_vector):
-#     num_nodes = nx.number_of_nodes(g)
-#     counter = 0
-#     for node in g.nodes():
-#         g.nodes[node]['features'] = feature_matrix[counter,:].tolist()
-#         g.nodes[node]['revenue'] = float(-output_vector[counter])
-#         g.nodes[node]['objcoeff'] = float(output_vector[counter])
-#         g.nodes[node]['model_indicator'] = 0
-#
-#         counter += 1
-#
-#         if counter == 1:
-#             print(g.nodes[node]['features'], output_vector[counter])
-#
-#     for u,v,edge in g.edges(data=True):
-#         if edge['E2']:
-#             edge['features'] = feature_matrix[counter,:].tolist()
-#             edge['cost'] = float(output_vector[counter])
-#             edge['objcoeff'] = float(output_vector[counter])
-#             edge['model_indicator'] = 1
-#
-#             counter += 1
-#
-#             if counter == num_nodes + 1:
-#                 print(edge['features'], output_vector[counter])
-#
-# def generateRevsCostsSPO_sameNodesEdges(g, E2, n_features=10, n_informative=10, bias=1000):
-#     num_nodes = nx.number_of_nodes(g)
-#     num_edges = len(E2)
-#
-#     rng = np.random.RandomState(0)
-#     _, _, true_func = make_regression(
-#         n_samples=1,
-#         n_features=n_features,
-#         n_informative=n_features,
-#         coef=True,
-#         random_state=rng)
-#
-#     true_func = np.expand_dims(np.append(true_func, [bias]), axis=1)
-#
-#     print(true_func)
-#
-#     feature_matrix = np.random.rand(num_nodes+num_edges, n_features+1)
-#     feature_matrix[:num_nodes,-1] = -1
-#     feature_matrix[num_nodes:,-1] = 1
-#     output_vector = feature_matrix.dot(true_func) + np.random.normal(loc=10, scale=2, size=(num_nodes+num_edges,1))
-#
-#     counter = 0
-#     for node in g.nodes():
-#         g.nodes[node]['features'] = feature_matrix[counter,:].tolist()
-#         g.nodes[node]['revenue'] = float(-output_vector[counter])
-#         g.nodes[node]['objcoeff'] = float(output_vector[counter])
-#         counter += 1
-#     for u,v,edge in g.edges(data=True):
-#         if edge['E2']:
-#             edge['features'] = feature_matrix[counter,:].tolist()
-#             edge['cost'] = float(output_vector[counter])
-#             edge['objcoeff'] = float(output_vector[counter])
-#             counter += 1
-#
-#     return feature_matrix, output_vector
-#
-# def generateE2(g, alphaE2):
-#     E2 = set()
-#     for u,v,edge in g.edges(data=True):
-#         if random.random() <= alphaE2:
-#             E2.add((u,v))
-#             edge['E2'] = True
-#         else:
-#             edge['E2'] = False
-#     return E2
 
 def createIP(rcpsp_model: RCPSPModel, ipfilename:str):
     solver = LP_RCPSP_CPLEX(rcpsp_model=rcpsp_model)
